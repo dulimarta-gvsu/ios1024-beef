@@ -1,20 +1,50 @@
-//
-//  GameViewMode.swift
-//  ios1024
-//
-//  Created by Hans Dulimarta for CIS357
-//
 import SwiftUI
 import Combine
+import FirebaseAuth
+import FirebaseFirestore
 
 class GameViewModel: ObservableObject {
-    @Published var grid: Array<Array<Int>>
+
+    // MARK: - Published Properties
+
+    @Published var grid: Array<Array<Int>> = []
     @Published private var _validSwipes = 0
+    @Published var targetScore: Int = 1024
+    @Published var boardSize: Int = 4
     
+
+    // MARK: - Private Properties
+
+    private let db = Firestore.firestore() // part 3
+    private var settingsChangedSubject = PassthroughSubject<Void, Never>()
+    var settingsChangedPublisher: AnyPublisher<Void, Never> { settingsChangedSubject.eraseToAnyPublisher() }
+    var cancellables: Set<AnyCancellable> = []
+
+
+    // MARK: - Initialization
+
+    init() {
+        //UserDefaults Initialization: Load from UserDefaults if present
+        loadSavedSettings()
+        grid = Array(repeating: Array(repeating: 0, count: boardSize), count: boardSize)
+        addRandomTile()
+        addRandomTile()
+    }
+    
+    func loadSavedSettings() {
+        boardSize = UserDefaults.standard.integer(forKey: "boardSize")
+        if boardSize == 0 { boardSize = 4 }
+
+        targetScore = UserDefaults.standard.integer(forKey: "targetScore")
+        if targetScore == 0 { targetScore = 2048 }
+    }
+
+    // MARK: - Game State Properties
+
     public var gameWon: Bool {
         for row in grid {
             for cell in row {
-                if cell >= 1024 {
+                if cell >= targetScore {
                     return true
                 }
             }
@@ -23,99 +53,57 @@ class GameViewModel: ObservableObject {
     }
 
     public var gameLost: Bool {
-        if gridIsFull() && !canMerge() {
-            return true
-        }
-        return false
-    }
-    
-    public func gridIsFull() -> Bool {
-        for row in grid {
-            for cell in row {
-                if cell == 0 {
-                    return false
-                }
-            }
-        }
-        return true
-    }
-    
-    public func canMerge() -> Bool {
-        for row in 0..<gridSize {
-            for col in 0..<gridSize {
-                if canMerge(row: row, col: col) {
-                        return true
-                }
-            }
-        }
-        return false
-    }
-    
-    public func canMerge(row: Int, col: Int) -> Bool {
-        let value = grid[row][col]
-        if value == 0 { return false }
-
-        let directions: [(Int, Int)] = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-        for (dr, dc) in directions {
-            let newRow = row + dr
-            let newCol = col + dc
-
-            if newRow >= 0 && newRow < gridSize && newCol >= 0 && newCol < gridSize &&
-                grid[newRow][newCol] == value {
-                return true
-            }
-        }
-        return false
+        return gridIsFull() && !canMerge()
     }
 
-    var validSwipes: Int {
-        get {
-            _validSwipes
-        }
-        set {
-            _validSwipes = newValue
-        }
+
+    // MARK: - Game Logic Functions
+
+    func applySettings() {
+        UserDefaults.standard.set(boardSize, forKey: "boardSize")
+        UserDefaults.standard.set(targetScore, forKey: "targetScore")
+        loadSavedSettings()
+        settingsChangedSubject.send()
+        resetGame()
     }
-    
-    // set gridSize
-    let gridSize = 4
-    
-    init () {
-        grid = Array(repeating: Array(repeating: 0, count: 4), count: 4)
-        addRandomTile()
-        addRandomTile()
-    }
-    
+
+
     func resetGame() {
-        grid = Array(repeating: Array(repeating: 0, count: 4), count: 4)
+        grid = Array(repeating: Array(repeating: 0, count: boardSize), count: boardSize)
         addRandomTile()
         addRandomTile()
         _validSwipes = 0
     }
-    
+
     func incrementValidSwipes() {
         _validSwipes += 1
     }
-    
+
+    var validSwipes: Int {
+        get { _validSwipes }
+        set { _validSwipes = newValue }
+    }
+
     func handleSwipe(_ direction: SwipeDirection) {
         if gameWon || gameLost { return }
-        var boardChanged: Bool = false
-        
-        switch(direction) {
-        case .left:
-            boardChanged = swipeLeft()
-        case .right:
-            boardChanged = swipeRight()
-        case .up:
-            boardChanged = swipeUp()
-        case .down:
-            boardChanged = swipeDown()
+
+        var boardChanged = false
+        switch direction {
+        case .left:  boardChanged = swipeLeft()
+        case .right: boardChanged = swipeRight()
+        case .up:    boardChanged = swipeUp()
+        case .down:  boardChanged = swipeDown()
         }
-        
+
         if boardChanged {
             addRandomTile()
             checkWinLose()
         }
+    }
+
+
+    func myFirestore() async {
+        // Future implementation for persisting game statistics (Part 3)
     }
     
     private func checkWinLose() {
@@ -125,28 +113,81 @@ class GameViewModel: ObservableObject {
             print("You lost!")
         }
     }
-    
+
     func addRandomTile() {
-        // find all empty positions in the grid
         let emptyPositions = grid.indices.flatMap { row in
             grid[row].indices.compactMap { col in
                 grid[row][col] == 0 ? (row, col) : nil
             }
         }
-        
-        // randomly select one empty position and place a new tile there
-        if let position = emptyPositions.randomElement() {
-            let (row, col) = position
+
+        if let (row, col) = emptyPositions.randomElement() {
             grid[row][col] = [2, 4].randomElement()!
         }
     }
+
+    func checkUserAcc(user: String, pwd: String) async -> Bool {
+        do {
+            try await Auth.auth().signIn(withEmail: user, password: pwd)
+            return true
+        } catch {
+            print("Error \(error.localizedDescription)")
+            return false
+        }
+    }
+
+
+
+    // MARK: - Helper Functions (Grid Logic)
+    private func gridIsFull() -> Bool {
+        for row in grid {
+            for cell in row {
+                if cell == 0 {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+
+    private func canMerge(row: Int, col: Int) -> Bool {
+        let value = grid[row][col]
+        guard value != 0 else { return false }
+
+        let directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+        for (dr, dc) in directions {
+            let newRow = row + dr
+            let newCol = col + dc
+
+            if newRow >= 0 && newRow < boardSize && newCol >= 0 && newCol < boardSize &&
+                grid[newRow][newCol] == value {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func canMerge() -> Bool {
+        for row in 0..<boardSize {
+            for col in 0..<boardSize {
+                if canMerge(row: row, col: col) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    // MARK: - Swipe Functions
+
     private func swipeLeft() -> Bool {
         var boardChanged = false
         
-        for row in 0..<gridSize {
-            var merged = [Bool](repeating: false, count: gridSize)
+        for row in 0..<boardSize {
+            var merged = [Bool](repeating: false, count: boardSize)
             
-            for col in 1..<gridSize {
+            for col in 1..<boardSize {
                 guard grid[row][col] != 0 else { continue }
                 
                 var targetCol = col
@@ -174,15 +215,15 @@ class GameViewModel: ObservableObject {
     private func swipeRight() -> Bool {
         var boardChanged = false
         
-        for row in 0..<gridSize {
-            var merged = [Bool](repeating: false, count: gridSize)
+        for row in 0..<boardSize {
+            var merged = [Bool](repeating: false, count: boardSize)
             
-            for col in (0..<(gridSize - 1)).reversed() {
+            for col in (0..<(boardSize - 1)).reversed() {
                 guard grid[row][col] != 0 else { continue }
                 
                 var targetCol = col
                 // Move tile as far right as possible
-                while targetCol < gridSize - 1 && grid[row][targetCol + 1] == 0 {
+                while targetCol < boardSize - 1 && grid[row][targetCol + 1] == 0 {
                     grid[row][targetCol + 1] = grid[row][targetCol]
                     grid[row][targetCol] = 0
                     targetCol += 1
@@ -190,7 +231,7 @@ class GameViewModel: ObservableObject {
                 }
                 
                 // Merge with right tile if possible
-                if targetCol < gridSize - 1 && grid[row][targetCol + 1] == grid[row][targetCol] && !merged[targetCol + 1] {
+                if targetCol < boardSize - 1 && grid[row][targetCol + 1] == grid[row][targetCol] && !merged[targetCol + 1] {
                     grid[row][targetCol + 1] *= 2
                     grid[row][targetCol] = 0
                     merged[targetCol + 1] = true
@@ -205,10 +246,10 @@ class GameViewModel: ObservableObject {
     private func swipeUp() -> Bool {
         var boardChanged = false
         
-        for col in 0..<gridSize {
-            var merged = [Bool](repeating: false, count: gridSize)
+        for col in 0..<boardSize {
+            var merged = [Bool](repeating: false, count: boardSize)
             
-            for row in 1..<gridSize {
+            for row in 1..<boardSize {
                 guard grid[row][col] != 0 else { continue }
                 
                 var targetRow = row
@@ -236,15 +277,15 @@ class GameViewModel: ObservableObject {
     private func swipeDown() -> Bool {
         var boardChanged = false
 
-        for col in 0..<gridSize {
-            var merged = [Bool](repeating: false, count: gridSize)
+        for col in 0..<boardSize {
+            var merged = [Bool](repeating: false, count: boardSize)
 
-            for row in (0..<(gridSize - 1)).reversed() {
+            for row in (0..<(boardSize - 1)).reversed() {
                 guard grid[row][col] != 0 else { continue }
 
                 var targetRow = row
                 // Move tile as far down as possible
-                while targetRow < gridSize - 1 && grid[targetRow + 1][col] == 0 {
+                while targetRow < boardSize - 1 && grid[targetRow + 1][col] == 0 {
                     grid[targetRow + 1][col] = grid[targetRow][col]
                     grid[targetRow][col] = 0
                     targetRow += 1
@@ -252,7 +293,7 @@ class GameViewModel: ObservableObject {
                 }
 
                 // Merge with lower tile if possible
-                if targetRow < gridSize - 1 &&
+                if targetRow < boardSize - 1 &&
                     grid[targetRow + 1][col] == grid[targetRow][col] &&
                     !merged[targetRow + 1] {
                     
@@ -265,4 +306,5 @@ class GameViewModel: ObservableObject {
         }
         return boardChanged
     }
+
 }

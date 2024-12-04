@@ -7,18 +7,23 @@
 
 import SwiftUI
 import Combine
+
 struct GameView: View {
     @State var swipeDirection: SwipeDirection? = .none
     @StateObject var viewModel: GameViewModel = GameViewModel()
+    
+    @EnvironmentObject var driver: MyNavigator
     @State private var showingWinAlert = false
     @State private var showingLoseAlert = false
-    //    @EnvironmentObject var driver: MyNavigator
+    @State private var triggerViewUpdate = false
+    @State private var cancellables: Set<AnyCancellable> = []
+
     
     var body: some View {
         VStack {
             Text("Welcome to 1024 by Keefer!").font(.title2)
             Text("Valid Swipes: \(viewModel.validSwipes)")
-            NumberGrid(viewModel: viewModel)
+            NumberGrid(viewModel: viewModel, shouldUpdate: $triggerViewUpdate)
                 .gesture(DragGesture().onEnded {
                     swipeDirection = determineSwipeDirection($0)
                     viewModel.handleSwipe(swipeDirection!)
@@ -29,6 +34,18 @@ struct GameView: View {
             if let swipeDirection {
                 Text("You swiped \(swipeDirection)")
             }
+            HStack {
+                Button("Logout") {
+                    driver.backHome()
+                }
+                Button("Settings") {
+                    driver.navigate(to: .SettingsDestination)
+                }
+                Button("Show Stats") {
+                    driver.navigate(to: .StatisticsDestination)
+                }
+            }
+            .buttonStyle(.borderedProminent)
             if viewModel.gameWon {
                 Text("You Won!")
             } else if viewModel.gameLost {
@@ -48,6 +65,13 @@ struct GameView: View {
                     .foregroundColor(.white)
                     .cornerRadius(8)
             }
+        }
+        .onAppear() {
+            viewModel.settingsChangedPublisher
+                .receive(on: DispatchQueue.main)
+                .sink { _ in self.viewModel.resetGame()
+                }
+                .store(in: &cancellables)
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .alert("You Won!", isPresented: $showingWinAlert) {
@@ -71,6 +95,7 @@ struct GameView: View {
     struct NumberGrid: View {
         @ObservedObject var viewModel: GameViewModel
         let size: Int = 4
+        @Binding var shouldUpdate: Bool
         
         var body: some View {
             VStack(spacing:4) {
@@ -88,8 +113,13 @@ struct GameView: View {
                     }
                 }
             }
+            .id(shouldUpdate)
+            .onAppear{
+                viewModel.applySettings()
+            }
             .padding(4)
             .background(Color.gray.opacity(0.4))
+            .id(shouldUpdate)
         }
     }
     
@@ -100,9 +130,8 @@ struct GameView: View {
             return swipe.translation.height < 0 ? .up : .down
         }
     }
-//    
-//    
-//    #Preview {
-//        GameView()
-//    }
+}
+
+#Preview {
+    LoginView(vm: GameViewModel())
 }

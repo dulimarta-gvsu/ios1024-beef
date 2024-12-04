@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyCmAe9pFvYLY-MQdGxWt2q9g7tSR4l8_OI</string>
+	<key>GCM_SENDER_ID</key>
+	<string>372116578837</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>edu.gvsu.cis357.ios1024</string>
+	<key>PROJECT_ID</key>
+	<string>fir-rileykee</string>
+	<key>STORAGE_BUCKET</key>
+	<string>fir-rileykee.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:372116578837:ios:e38134f70e4ada3c55641c</string>
+	<key>DATABASE_URL</key>
+	<string>https://fir-rileykee-default-rtdb.firebaseio.com</string>
+</dict>
+</plist>
